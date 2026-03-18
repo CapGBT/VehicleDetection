@@ -1,0 +1,27 @@
+{
+  "metadata": {
+    "name": "campus-lot-a",
+    "camera_angle": "top-angle",
+    "notes": "Example configuration showing spot polygons plus a vehicle count line."
+  },
+  "spots": [
+    {
+      "id": 1,
+      "coordinates": [[131, 307], [199, 295], [212, 367], [143, 381]]
+    },
+    {
+      "id": 2,
+      "coordinates": [[207, 293], [278, 281], [292, 355], [220, 367]]
+    }
+  ],
+  "count_lines": [
+    {
+      "id": "gate_main",
+      "start": [470, 120],
+      "end": [470, 470],
+      "direction": "vertical",
+      "positive_label": "entry",
+      "negative_label": "exit"
+    }
+  ]
+}

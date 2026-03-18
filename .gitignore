@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+desktop.ini
+.env
+venv/
+.venv/
+
+data/frames/
+results/detections/

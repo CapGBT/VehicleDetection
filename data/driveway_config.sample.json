@@ -1,0 +1,90 @@
+{
+  "metadata": {
+    "name": "sample-driveway-camera",
+    "camera_angle": "roadside-driveway",
+    "notes": "Sample config using only two trigger regions for counting: left for entry, right for exit. Coordinates are tuned for the current 965x540-style monitor output."
+  },
+  "spots": [],
+  "detection_zones": [],
+  "count_zones": [
+    {
+      "id": "entry_trigger",
+      "label": "entry",
+      "anchor": "bottom_center",
+      "polygon": [
+        [
+          70,
+          501
+        ],
+        [
+          112,
+          454
+        ],
+        [
+          185,
+          440
+        ],
+        [
+          277,
+          441
+        ],
+        [
+          313,
+          474
+        ],
+        [
+          284,
+          502
+        ],
+        [
+          134,
+          516
+        ],
+        [
+          72,
+          502
+        ]
+      ]
+    },
+    {
+      "id": "exit_trigger",
+      "label": "exit",
+      "anchor": "bottom_center",
+      "polygon": [
+        [
+          573,
+          440
+        ],
+        [
+          654,
+          394
+        ],
+        [
+          703,
+          368
+        ],
+        [
+          792,
+          392
+        ],
+        [
+          818,
+          452
+        ],
+        [
+          708,
+          470
+        ],
+        [
+          617,
+          461
+        ],
+        [
+          574,
+          438
+        ]
+      ]
+    }
+  ],
+  "count_lines": []
+}
