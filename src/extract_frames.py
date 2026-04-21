@@ -47,7 +47,7 @@ def extract_frames(video_path: Path, output_dir: Path, frame_step: int = 2):
 
 if __name__ == "__main__":
     BASE_DIR = Path(__file__).resolve().parent.parent
-    video_path = BASE_DIR / "data" / "raw" / "parkingSet.mp4"  # ✓ Updated filename
+    video_path = BASE_DIR / "data" / "raw" / "2in2outTest.MOV"  # ✓ Updated filename
     output_dir = BASE_DIR / "data" / "frames"
     
     extract_frames(video_path, output_dir, frame_step=2)
