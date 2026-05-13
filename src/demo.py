@@ -12,9 +12,12 @@ Press 'q' to quit, SPACE to pause/resume.
 import cv2
 import json
 import math
+import ssl
 import numpy as np
 from pathlib import Path
 from ultralytics import YOLO
+
+import paho.mqtt.client as mqtt_lib
 
 
 # ── Configuration ─────────────────────────────────────────────────────────────
@@ -26,11 +29,73 @@ MODEL_PATH   = "yolov8n.pt"
 CONFIDENCE        = 0.4    # YOLO detection confidence threshold
 MAX_TRACK_DIST    = 80     # Max pixels a centroid can move between frames (same vehicle)
 MAX_MISSING       = 8      # Frames a track can disappear before being dropped
-LOT_CAPACITY      = 20     # Starting number of available spots
+LOT_CAPACITY      = 60     # Starting number of available spots
 FRAME_SKIP        = 4      # Run YOLO every Nth frame; display every frame at full speed
 ZONE_COOLDOWN     = 30     # Frames to block re-firing after an entry or exit event
 
 VEHICLE_CLASSES = [2, 3, 5, 7]  # COCO: car, motorcycle, bus, truck
+
+# ── MQTT Configuration ────────────────────────────────────────────────────────
+
+MQTT_ENABLED  = False                    # Set False to run without publishing
+MQTT_BROKER   = ""      # e.g. abc123.s1.eu.hivemq.cloud
+MQTT_PORT     = None
+MQTT_USERNAME = ""
+MQTT_PASSWORD = ""
+LOT_ID        = ""
+PI_ID         = ""
+
+
+# ── MQTT Client ───────────────────────────────────────────────────────────────
+
+def init_mqtt() -> mqtt_lib.Client | None:
+    """Connect to HiveMQ broker and return client, or None if disabled/failed."""
+    if not MQTT_ENABLED:
+        return None
+
+    client = mqtt_lib.Client(protocol=mqtt_lib.MQTTv5)
+    client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    client.tls_set(tls_version=ssl.PROTOCOL_TLS_CLIENT)
+
+    def on_connect(c, userdata, flags, rc, properties=None):
+        if rc == 0:
+            print(f"[MQTT] Connected → publishing to lots/{LOT_ID}/delta")
+        else:
+            print(f"[MQTT] Connection failed (rc={rc})")
+
+    def on_disconnect(c, userdata, rc, properties=None, reasonCode=None):
+        if rc != 0:
+            print(f"[MQTT] Disconnected unexpectedly (rc={rc})")
+
+    client.on_connect    = on_connect
+    client.on_disconnect = on_disconnect
+
+    try:
+        print(f"[MQTT] Connecting to {MQTT_BROKER}:{MQTT_PORT}...")
+        client.connect(MQTT_BROKER, MQTT_PORT)
+        client.loop_start()
+    except Exception as e:
+        print(f"[MQTT] Could not connect: {e}")
+        return None
+
+    return client
+
+
+def publish_delta(client: mqtt_lib.Client | None, delta: int):
+    """Publish +1 (entry) or -1 (exit) delta event as JSON."""
+    if client is None:
+        return
+
+    topic   = f"lots/{LOT_ID}/delta"
+    payload = json.dumps({"delta": delta, "pi": PI_ID})
+    result  = client.publish(topic, payload, qos=1)
+
+    if result.rc == mqtt_lib.MQTT_ERR_SUCCESS:
+        label = "ENTRY" if delta > 0 else "EXIT"
+        print(f"[MQTT] {label} ({delta:+d}) → {topic}")
+    else:
+        print(f"[MQTT] Publish failed (rc={result.rc})")
+
 
 # ── Zone Loading ───────────────────────────────────────────────────────────────
 
@@ -93,10 +158,11 @@ class CentroidTracker:
         self.entry_last_fired   = -ZONE_COOLDOWN
         self.exit_last_fired    = -ZONE_COOLDOWN
 
-    def update(self, detections: list[dict]) -> list[str]:
+    def update(self, detections: list[dict], mqtt_client=None) -> list[str]:
         """
         Match detections to existing tracks, update zone states,
         and return a list of events fired this frame ("entry" or "exit").
+        Publishes MQTT delta events when entry/exit fires.
         """
         events = []
         unmatched_ids = set(self.tracks.keys())
@@ -129,6 +195,7 @@ class CentroidTracker:
                         self.entry_count += 1
                         self.entry_last_fired = self.frame_index
                         events.append("entry")
+                        publish_delta(mqtt_client, +1)
                         print(f"[EVENT] Entry detected  → entries={self.entry_count}")
                     else:
                         print(f"[SKIP]  Entry blocked by cooldown (frame {self.frame_index})")
@@ -138,6 +205,7 @@ class CentroidTracker:
                         self.exit_count += 1
                         self.exit_last_fired = self.frame_index
                         events.append("exit")
+                        publish_delta(mqtt_client, -1)
                         print(f"[EVENT] Exit detected   → exits={self.exit_count}")
                     else:
                         print(f"[SKIP]  Exit blocked by cooldown (frame {self.frame_index})")
@@ -238,6 +306,9 @@ def main():
     print("Parking Lot Demo")
     print("=" * 50)
 
+    # Connect to MQTT broker
+    mqtt_client = init_mqtt()
+
     # Load zones
     print(f"Loading zones from {ZONES_JSON}...")
     entry_zone, exit_zone = load_zones(ZONES_JSON)
@@ -293,8 +364,8 @@ def main():
         if frame_index % FRAME_SKIP == 0:
             detections = detect_vehicles(model, frame)
 
-        # Track and get events
-        events = tracker.update(detections)
+        # Track and get events — mqtt_client passed so publish fires on crossing
+        events = tracker.update(detections, mqtt_client=mqtt_client)
 
         # Update available count
         for event in events:
@@ -314,6 +385,12 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
+
+    # Clean MQTT shutdown
+    if mqtt_client is not None:
+        mqtt_client.loop_stop()
+        mqtt_client.disconnect()
+        print("[MQTT] Disconnected.")
 
     print()
     print("=" * 50)
